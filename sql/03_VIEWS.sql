@@ -111,4 +111,55 @@ GROUP BY t.id, t.name;
 --    FROM vw_revenue_by_tenant
 --    WHERE revenue IS NULL OR revenue = 0;
 
+-- View: vw_cash_register_summary
+-- Objetivo: Apresentar o resumo financeiro de cada caixa aberto ou fechado,
+-- consolidando todas as movimentacoes (entradas e saidas) do turno.
+-- Esta view simplifica o processo critico de fechamento de caixa, escondendo
+-- a complexidade de somas condicionais (CASE WHEN) e multiplos JOINS.
+DROP VIEW IF EXISTS `vw_cash_register_summary`;
+CREATE VIEW `vw_cash_register_summary` AS
+SELECT 
+    cr.tenant_id,
+    t.name AS restaurant_name,
+    cr.id AS cash_register_id,
+    cr.name AS register_name,
+    cr.status,
+    cr.opened_at,
+    cr.closed_at,
+    u_open.name AS opened_by_name,
+    u_close.name AS closed_by_name,
+    cr.opening_balance,
+    -- Calculos de entradas
+    COALESCE(SUM(CASE WHEN cm.type = 'deposit' THEN cm.amount ELSE 0 END), 0) AS total_deposits,
+    COALESCE(SUM(CASE WHEN cm.type = 'sale' THEN cm.amount ELSE 0 END), 0) AS total_sales,
+    -- Calculos de saidas
+    COALESCE(SUM(CASE WHEN cm.type IN ('withdrawal', 'expense') THEN cm.amount ELSE 0 END), 0) AS total_outflows,
+    -- Saldo que deveria ter fisicamente na gaveta
+    (cr.opening_balance + 
+     COALESCE(SUM(CASE WHEN cm.type IN ('deposit', 'sale') THEN cm.amount ELSE 0 END), 0) - 
+     COALESCE(SUM(CASE WHEN cm.type IN ('withdrawal', 'expense') THEN cm.amount ELSE 0 END), 0)
+    ) AS expected_balance,
+    cr.current_balance AS system_registered_balance
+FROM cash_registers cr
+LEFT JOIN tenants t ON cr.tenant_id = t.id
+LEFT JOIN users u_open ON cr.opened_by = u_open.id
+LEFT JOIN users u_close ON cr.closed_by = u_close.id
+LEFT JOIN cash_movements cm ON cr.id = cm.cash_register_id
+GROUP BY 
+    cr.tenant_id, t.name, cr.id, cr.name, cr.status, 
+    cr.opened_at, cr.closed_at, u_open.name, u_close.name, 
+    cr.opening_balance, cr.current_balance;
+
+-- Observacoes/como usar:
+-- 1) Auditoria rapida: listar caixas fechados onde o saldo registrado 
+--    nao bate com o saldo esperado (furo de caixa):
+--    SELECT restaurant_name, register_name, closed_by_name, expected_balance, system_registered_balance 
+--    FROM vw_cash_register_summary
+--    WHERE status = 'closed' AND expected_balance != system_registered_balance;
+
+-- 2) Acompanhar saldos de caixas abertos em tempo real:
+--    SELECT register_name, opened_by_name, total_sales, expected_balance
+--    FROM vw_cash_register_summary
+--    WHERE tenant_id = 1 AND status = 'open';
+
 -- Fim do arquivo
