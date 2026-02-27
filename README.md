@@ -2,7 +2,7 @@
 
 **Disciplina:** Banco de Dados  
 **Instituição:** Universidade Federal do Agreste de Pernambuco (UFAPE)  
-**Alunos:** Douglas Henrique, Joaci Laurindo, Genildo Burgos, Antonio Marcos
+**Alunos:** Douglas Henrique, Joaci Laurindo, Genildo Burgos, Antonio Marcos  
 **Data de Entrega:** 06/02/2026
 
 ---
@@ -29,9 +29,12 @@ Sistema completo de gestão de restaurantes com arquitetura **multi-tenant**, pe
 | Tecnologia | Versão | Finalidade |
 |------------|--------|------------|
 | MySQL | 8.0 | Sistema Gerenciador de Banco de Dados |
+| PHP | 8.2 | Backend da aplicação |
+| Apache | 2.4 | Servidor web |
+| HTML/CSS/JS | — | Frontend da aplicação |
 | Docker | Latest | Containerização |
 | Docker Compose | 3.8 | Orquestração de containers |
-| phpMyAdmin | Latest | Interface web para gerenciamento |
+| phpMyAdmin | Latest | Interface web para gerenciamento do banco |
 
 ---
 
@@ -52,6 +55,14 @@ Sistema completo de gestão de restaurantes com arquitetura **multi-tenant**, pe
 11. **transactions** - Transações financeiras
 12. **cash_registers** - Caixas
 13. **cash_movements** - Movimentações de caixa
+
+### 3 Views SQL
+
+| View | Tabelas Envolvidas | Finalidade |
+|------|--------------------|------------|
+| **vw_order_summary** | 5 tabelas + subquery | Resumo completo dos pedidos com totais |
+| **vw_revenue_by_tenant** | 2 tabelas + GROUP BY | Receita total por restaurante |
+| **vw_cash_register_summary** | 4 tabelas + CASE WHEN | Resumo dos caixas com entradas e saídas |
 
 ### Diagrama Conceitual
 
@@ -92,7 +103,7 @@ Este comando irá:
 - ✅ Criar o container MySQL 8.0
 - ✅ Criar o container phpMyAdmin
 - ✅ Executar automaticamente os scripts SQL da pasta `sql/`
-- ✅ Popular o banco com dados de teste
+- ✅ Popular o banco com dados de teste (50+ registros por tabela)
 
 ### 3. Aguarde a Inicialização
 
@@ -117,11 +128,27 @@ Abra seu navegador em: **http://localhost:8080**
 
 ### 5. Verificar o Banco
 
-No phpMyAdmin:
-1. Clique em `laravel_restaurants` no menu lateral
-2. Você deve ver **15 tabelas**
-3. Clique em `products` → **Navegar**
-4. Deve mostrar **14 produtos** ✅
+Execute no phpMyAdmin (aba SQL):
+
+```sql
+SELECT 'tenants'     AS tabela, COUNT(*) AS total FROM tenants
+UNION ALL SELECT 'customers',   COUNT(*) FROM customers
+UNION ALL SELECT 'products',    COUNT(*) FROM products
+UNION ALL SELECT 'orders',      COUNT(*) FROM orders
+UNION ALL SELECT 'order_items', COUNT(*) FROM order_items
+UNION ALL SELECT 'transactions',COUNT(*) FROM transactions;
+```
+
+Resultado esperado:
+
+| Tabela | Total |
+|--------|-------|
+| tenants | 3 |
+| customers | 56 |
+| products | 54 |
+| orders | 56 |
+| order_items | 100+ |
+| transactions | 53+ |
 
 ---
 
@@ -132,14 +159,22 @@ bd-restaurantes-multi-tenant/
 │
 ├── sql/
 │   ├── 01_DDL_estrutura.sql      # Criação das tabelas (DDL)
-│   └── 02_DML_dados_teste.sql    # Dados de teste (DML)
+│   ├── 02_DML_dados_teste.sql    # Dados completos de teste (DML)
+│   └── 03_VIEWS.sql              # Criação das 3 views SQL
 │
-├── docker-compose.yml             # Configuração Docker
+├── app/                          # Aplicação PHP (backend + frontend)
+│   ├── Dockerfile                # Imagem PHP 8.2 + Apache
+│   ├── index.php                 # Frontend (SPA em HTML/CSS/JS)
+│   ├── api.php                   # Backend REST (CRUD)
+│   └── includes/
+│       └── db.php                # Conexão com o banco de dados
+│
+├── img/
+│   └── Estrutura ER.png          # Diagrama Entidade-Relacionamento
+│
+├── docker-compose.yml             # Configuração Docker (3 containers)
 ├── README.md                      # Este arquivo
-├── DICIONARIO_DADOS.md            # Dicionário completo
-├── INSTRUCOES_ENTREGA.md          # Guia de entrega
-└── diagrama_er.png                # Diagrama ER
-
+└── DICIONARIO_DADOS.md            # Dicionário completo de dados
 ```
 
 ---
@@ -149,11 +184,10 @@ bd-restaurantes-multi-tenant/
 O dicionário completo está em **[DICIONARIO_DADOS.md](DICIONARIO_DADOS.md)**.
 
 Contém:
-- ✅ Descrição de todas as 15 tabelas
+- ✅ Descrição de todas as 13 tabelas
 - ✅ Tipo de dado, tamanho e restrições de cada campo
 - ✅ Semântica detalhada dos atributos
 - ✅ Todos os índices e chaves estrangeiras
-- ✅ Diagramas de relacionamento
 - ✅ Explicação da normalização (3FN)
 
 ---
@@ -189,24 +223,24 @@ O banco de dados está normalizado até a **Terceira Forma Normal (3FN)**.
 
 Os dados foram inseridos via **script SQL (DML)** executado automaticamente pelo Docker na primeira inicialização.
 
-O arquivo `02_DML_dados_teste.sql` contém:
+O arquivo `02_DML_dados_teste.sql` contém todos os dados de teste, incluindo os 3 restaurantes (tenants), clientes, produtos, pedidos e transações — garantindo que o banco inicie populado e funcional sem nenhuma intervenção manual.
 
 ### Dados de Teste Inseridos
 
 | Entidade | Quantidade | Detalhes |
 |----------|------------|----------|
 | **Planos** | 3 | Básico (R$ 49), Intermediário (R$ 147), Profissional (R$ 297) |
-| **Restaurantes** | 3 | Anotado, Sabor da Casa, Cantina Italiana |
+| **Restaurantes** | 3 | Anotado Restaurante, Sabor da Casa, Cantina Italiana |
 | **Assinaturas** | 3 | Uma por restaurante |
-| **Usuários** | 6 | 1 super admin + 5 funcionários |
-| **Clientes** | 6 | Com diferentes níveis de fidelidade |
-| **Mesas** | 11 | Distribuídas entre os restaurantes |
-| **Categorias** | 11 | Entradas, Massas, Bebidas, etc. |
-| **Produtos** | 14 | Cardápio completo com preços |
-| **Pedidos** | 6 | Incluindo 1 cancelado |
-| **Itens de Pedidos** | 12 | Relacionamento entre pedidos e produtos |
-| **Caixas** | 4 | Com saldos e movimentações |
-| **Transações** | 7 | Vendas e despesas |
+| **Usuários** | 6 | 1 super admin + 5 funcionários distribuídos por restaurante |
+| **Clientes** | 56 | Com níveis bronze, silver, gold e platinum |
+| **Mesas** | 11 | Distribuídas entre os 3 restaurantes |
+| **Categorias** | 11 | Entradas, Massas, Bebidas, Antipasti, Pizza, Vinhos, etc. |
+| **Produtos** | 54 | Cardápio completo por restaurante com preços e custos |
+| **Pedidos** | 56 | dine_in, takeaway e delivery — inclui cancelados |
+| **Itens de Pedidos** | 100+ | Relacionamento entre pedidos e produtos |
+| **Caixas** | 4 | Com saldos e status |
+| **Transações** | 53+ | Vendas, despesas com fornecedores e folha |
 | **Movimentações** | 8 | Entradas e saídas de caixa |
 
 ### Por que este método?
@@ -218,59 +252,34 @@ O arquivo `02_DML_dados_teste.sql` contém:
 
 ---
 
-## 🔐 Acesso ao Sistema
+## 🔍 Views SQL
 
-### Interface Web (phpMyAdmin)
+As views foram criadas para simplificar consultas complexas envolvendo múltiplos JOINs e cálculos agregados.
 
-**URL:** http://localhost:8080
+### vw_order_summary
+Resume todos os pedidos com dados do restaurante, mesa, cliente e totais calculados. Envolve 5 tabelas e subquery de agregação.
 
-**Credenciais MySQL:**
-- Usuário: `root`
-- Senha: `root123`
-
-**OU**
-
-- Usuário: `restaurant_user`
-- Senha: `restaurant_pass`
-
-### Linha de Comando
-
-```bash
-# Acessar MySQL via Docker
-docker exec -it restaurant_mysql mysql -uroot -proot123
-
-# Usar o banco
-USE laravel_restaurants;
-
-# Listar tabelas
-SHOW TABLES;
-
-# Contar produtos
-SELECT COUNT(*) FROM products;
+```sql
+SELECT * FROM vw_order_summary LIMIT 10;
 ```
 
-### Credenciais dos Usuários do Sistema
+### vw_revenue_by_tenant
+Calcula a receita total por restaurante, agrupando pedidos entregues e pagos.
 
-| Email | Senha | Papel | Restaurante |
-|-------|-------|-------|-------------|
-| admin@servefacil.com | password | Super Admin | - |
-| admin@anotado.com | password | Admin | Anotado |
-| gerente@anotado.com | password | Gerente | Anotado |
-| funcionario@anotado.com | password | Funcionário | Anotado |
+```sql
+SELECT * FROM vw_revenue_by_tenant;
+```
 
-> **Nota:** Senhas criptografadas com bcrypt. Senha padrão: `password`
+### vw_cash_register_summary
+Consolida o saldo de cada caixa com total de entradas e saídas usando `CASE WHEN`.
+
+```sql
+SELECT * FROM vw_cash_register_summary;
+```
 
 ---
 
 ## 🔍 Queries de Exemplo
-
-### Listar Restaurantes Ativos
-
-```sql
-SELECT id, name, slug, status 
-FROM tenants 
-WHERE status = 'active';
-```
 
 ### Produtos por Categoria
 
@@ -286,32 +295,11 @@ WHERE p.tenant_id = 1
 ORDER BY c.name, p.name;
 ```
 
-### Pedidos do Dia com Total
-
-```sql
-SELECT 
-    o.order_number,
-    c.name AS cliente,
-    t.number AS mesa,
-    o.total,
-    o.status,
-    o.payment_method
-FROM orders o
-LEFT JOIN customers c ON o.customer_id = c.id
-LEFT JOIN tables t ON o.table_id = t.id
-WHERE o.tenant_id = 1
-  AND DATE(o.created_at) = CURDATE()
-ORDER BY o.created_at DESC;
-```
-
 ### Clientes VIP (Fidelidade)
 
 ```sql
 SELECT 
-    name,
-    email,
-    points,
-    level
+    name, email, points, level
 FROM customers
 WHERE tenant_id = 1
   AND level IN ('gold', 'platinum')
@@ -353,7 +341,7 @@ docker-compose start
 # Parar e remover
 docker-compose down
 
-# Parar e remover TUDO (inclusive dados)
+# Parar e remover TUDO (inclusive dados) — use para recriar do zero
 docker-compose down -v
 
 # Ver logs
@@ -377,45 +365,63 @@ docker exec -i restaurant_mysql mysql -uroot -proot123 laravel_restaurants < bac
 
 ## 🐛 Solução de Problemas
 
-### Porta 3307 em uso
+### Banco não populou (tabelas vazias)
 
-Edite o `docker-compose.yml` e mude:
-```yaml
-ports:
-  - "3308:3306"  # Usar porta 3308 ao invés de 3307
-```
-
-### Scripts não executaram
+O Docker só executa os scripts de inicialização **uma vez**. Se o container já existia sem dados, destrua tudo e recomece:
 
 ```bash
-# Verificar se os arquivos estão na pasta sql/
-dir sql
-
-# Recriar tudo do zero
 docker-compose down -v
 docker-compose up -d
-
-# Ver logs para debugar
-docker-compose logs mysql
 ```
 
-### Banco não foi criado
+### Porta 8080 em uso
+
+Edite o `docker-compose.yml` e mude a porta do phpMyAdmin:
+```yaml
+ports:
+  - "8081:80"  # Usar porta 8081
+```
+
+### Ver logs completos
 
 ```bash
-# Ver logs completos
 docker logs restaurant_mysql
-
-# Entrar no container e verificar
-docker exec -it restaurant_mysql bash
-mysql -uroot -proot123 -e "SHOW DATABASES;"
 ```
 
 ---
 
-## 📖 Documentação Adicional
+## 🔐 Acesso ao Sistema
 
-- **[DICIONARIO_DADOS.md](../bd-restaurants-multi-tenant//dicionario_de_dados.md)** - Dicionário completo das 15 tabelas
+### Sistema Principal (PHP + Apache)
 
+**URL:** http://localhost:3000
+
+Funcionalidades disponíveis:
+- Dashboard com estatísticas gerais
+- CRUD de Produtos (criar, editar, excluir)
+- CRUD de Clientes (criar, editar, excluir)
+- Listagem de Pedidos
+- Página de Visões SQL com as 3 views
+
+### Interface de Banco de Dados (phpMyAdmin)
+
+**URL:** http://localhost:8080
+
+**Credenciais MySQL:**
+- Usuário: `root`
+- Senha: `root123`
+
+### Credenciais dos Usuários do Sistema
+
+| Email | Papel | Restaurante |
+|-------|-------|-------------|
+| admin@servefacil.com | Super Admin | Todos |
+| admin@anotado.com | Admin | Anotado Restaurante |
+| gerente@anotado.com | Gerente | Anotado Restaurante |
+| admin@sabordacasa.com | Admin | Sabor da Casa |
+| admin@cantina.com | Admin | Cantina Italiana |
+
+> **Nota:** Senhas criptografadas com bcrypt. Senha padrão: `password`
 
 ---
 
@@ -423,35 +429,40 @@ mysql -uroot -proot123 -e "SHOW DATABASES;"
 
 | Requisito | Status | Arquivo/Localização |
 |-----------|--------|---------------------|
-| Esquema Lógico | ✅ | 15 tabelas com PKs e FKs em `01_DDL_estrutura.sql` |
+| Esquema Lógico | ✅ | 13 tabelas com PKs e FKs em `01_DDL_estrutura.sql` |
+| Mínimo 3 Views | ✅ | `vw_order_summary`, `vw_revenue_by_tenant`, `vw_cash_register_summary` |
+| CRUD Funcional | ✅ | `app/api.php` — Produtos e Clientes (Create, Read, Update, Delete) |
+| Frontend | ✅ | `app/index.php` — SPA em HTML/CSS/JS puro |
+| Tela com as Views | ✅ | Página "Visoes SQL" em `app/index.php` exibe as 3 views |
 | Dicionário de Dados | ✅ | `DICIONARIO_DADOS.md` completo |
-| Normalização (2FN+) | ✅ | 3FN - documentado no dicionário |
+| Normalização (3FN) | ✅ | Documentado no dicionário |
 | Script DDL | ✅ | `sql/01_DDL_estrutura.sql` |
 | Script DML | ✅ | `sql/02_DML_dados_teste.sql` |
-| Docker | ✅ | `docker-compose.yml` funcional |
-| README | ✅ | Este arquivo com todas as instruções |
-| Banco Funcional | ✅ | Executando em Docker |
-| Banco Povoado | ✅ | 14 produtos + dados completos |
+| 50+ registros por tabela | ✅ | customers=56, products=54, orders=56 |
+| Docker | ✅ | `docker-compose.yml` — sistema na porta `3000`, phpMyAdmin na porta `8080` |
+| README | ✅ | Este arquivo |
+| Banco Funcional | ✅ | Executando em Docker, inicialização automática |
 
 ---
-a
+
 ## 👨‍💻 Autores
 
-**Nome:** Douglas Henrique
-**Nome:** Joaci Laurindo
-**Nome:** Genildo Burgos
-**Nome:** Antonio Marcos
-**Curso:** Bacharelado em Ciência da Computação  
-**Instituição:** Universidade Federal do Agreste de Pernambuco (UFAPE)  
+| Nome | Curso | Instituição |
+|------|-------|-------------|
+| Douglas Henrique | Bacharelado em Ciência da Computação | UFAPE |
+| Joaci Laurindo | Bacharelado em Ciência da Computação | UFAPE |
+| Genildo Burgos | Bacharelado em Ciência da Computação | UFAPE |
+| Antonio Marcos | Bacharelado em Ciência da Computação | UFAPE |
+
 **Disciplina:** Banco de Dados  
-**Professor(a):** PRISCILLA KELLY MACHADO VIEIRA AZEVEDO
+**Professor(a):** Priscilla Kelly Machado Vieira Azevedo  
 **Data:** 06/02/2026
 
 ---
 
 ## 📜 Licença
 
-Projeto desenvolvido para fins acadêmicos como parte da avaliação da disciplina de Banco de Dados.
+Projeto desenvolvido para fins acadêmicos como parte da avaliação da disciplina de Banco de Dados — 2VA.
 
 ---
 

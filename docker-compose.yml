@@ -17,6 +17,11 @@ services:
       - ./sql:/docker-entrypoint-initdb.d
     networks:
       - restaurant_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot123"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   phpmyadmin:
     image: phpmyadmin:latest
@@ -31,6 +36,20 @@ services:
       - "8080:80"
     depends_on:
       - mysql
+    networks:
+      - restaurant_network
+
+  app:
+    build: ./app
+    container_name: restaurant_app
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    volumes:
+      - ./app:/var/www/html
+    depends_on:
+      mysql:
+        condition: service_healthy
     networks:
       - restaurant_network
 
