@@ -65,7 +65,8 @@ Sistema completo de gestão de restaurantes com arquitetura **multi-tenant**, pe
 | **vw_cash_register_summary** | 4 tabelas + CASE WHEN | Resumo dos caixas com entradas e saídas |
 
 ### Diagrama Conceitual
-
+![Diagrama ER](img/Diagrama_Conceitual_ER.svg)
+### Diagrama Lógico
 ![Diagrama ER](img/Estrutura%20ER.png)
 
 ---
@@ -181,7 +182,7 @@ bd-restaurantes-multi-tenant/
 
 ## 📚 Dicionário de Dados
 
-O dicionário completo está em **[DICIONARIO_DADOS.md](DICIONARIO_DADOS.md)**.
+O dicionário completo está em **[DICIONARIO_DADOS.md](dicionario_de_dados.md)**.
 
 Contém:
 - ✅ Descrição de todas as 13 tabelas
@@ -374,7 +375,7 @@ docker-compose down -v
 docker-compose up -d
 ```
 
-### Porta 8080 em uso
+### Se Porta 8080 estiver em uso
 
 Edite o `docker-compose.yml` e mude a porta do phpMyAdmin:
 ```yaml
@@ -390,7 +391,7 @@ docker logs restaurant_mysql
 
 ---
 
-## 🔐 Acesso ao Sistema
+## 🔐 Acesso ao Sistema FRONT + BACK
 
 ### Sistema Principal (PHP + Apache)
 
