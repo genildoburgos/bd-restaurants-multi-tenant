@@ -33,6 +33,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;fon
 .btn-success{background:rgba(76,175,125,.15);color:var(--success);border:1px solid rgba(76,175,125,.3)}
 .btn-info{background:rgba(91,155,213,.15);color:var(--info);border:1px solid rgba(91,155,213,.3)}
 .btn-pdf{background:rgba(224,82,82,.15);color:#ff8a8a;border:1px solid rgba(224,82,82,.3)}.btn-pdf:hover{background:rgba(224,82,82,.28)}
+.btn-csv{background:rgba(76,175,125,.15);color:#6fcf97;border:1px solid rgba(76,175,125,.3)}.btn-csv:hover{background:rgba(76,175,125,.28)}
 .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:26px}
 .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px;position:relative;overflow:hidden}
 .stat-card::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--c,var(--accent))}
@@ -239,7 +240,7 @@ select.search{cursor:pointer}
     <div class="report-header"><h1>ServeFacil — Relatório Gerencial</h1><p id="report-print-date"></p></div>
     <div class="page-header">
       <div><div class="page-title">Relatórios <em>Gerenciais</em></div><div class="page-sub">Dashboards e análises do sistema</div></div>
-      <button class="btn btn-pdf" onclick="exportPDF()">🖨️ Exportar PDF</button>
+      <div style="display:flex;gap:8px"><button class="btn btn-csv" onclick="openCSVModal()">📥 Exportar CSV</button><button class="btn btn-pdf" onclick="exportPDF()">🖨️ Exportar PDF</button></div>
     </div>
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-label">Receita Total</div><div class="stat-value" id="rep-revenue">...</div><div class="stat-hint">pedidos entregues</div></div>
@@ -419,6 +420,36 @@ select.search{cursor:pointer}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-product')">Cancelar</button>
       <button class="btn btn-primary" onclick="saveProduct()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EXPORTAR CSV -->
+<div class="overlay" id="modal-csv">
+  <div class="modal" style="width:400px">
+    <div class="modal-title">Exportar CSV</div>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:18px">Selecione os relatórios que deseja exportar:</p>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:1px solid var(--border);border-radius:8px">
+        <input type="checkbox" id="csv-produtos" checked style="width:16px;height:16px;accent-color:var(--accent)">
+        <div><div style="font-weight:500">📦 Produtos Mais Vendidos</div><div style="font-size:12px;color:var(--muted)">Ranking com qtd vendida e receita</div></div>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:1px solid var(--border);border-radius:8px">
+        <input type="checkbox" id="csv-clientes" checked style="width:16px;height:16px;accent-color:var(--accent)">
+        <div><div style="font-weight:500">👤 Top Clientes por Gasto</div><div style="font-size:12px;color:var(--muted)">Nível, pontos e total gasto</div></div>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:1px solid var(--border);border-radius:8px">
+        <input type="checkbox" id="csv-receita" checked style="width:16px;height:16px;accent-color:var(--accent)">
+        <div><div style="font-weight:500">💰 Receita por Restaurante</div><div style="font-size:12px;color:var(--muted)">Total faturado por tenant</div></div>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:1px solid var(--border);border-radius:8px">
+        <input type="checkbox" id="csv-estoque" style="width:16px;height:16px;accent-color:var(--accent)">
+        <div><div style="font-weight:500">⚠️ Estoque Crítico</div><div style="font-size:12px;color:var(--muted)">Produtos com quantidade abaixo de 10</div></div>
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-csv')">Cancelar</button>
+      <button class="btn btn-csv" onclick="doExportCSV()">📥 Baixar Selecionados</button>
     </div>
   </div>
 </div>
@@ -856,7 +887,9 @@ const CB={responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{col
 const charts={};
 function killChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
 async function loadReports() {
+  if (reportDataCache) return;
   const d=await api('report_data');
+  reportDataCache = d;
   const{kpis,revenue_by_tenant,status_dist,top_products,level_dist,payment_dist,top_customers,low_stock}=d;
   $('rep-revenue').textContent=fmt(kpis.revenue);
   $('rep-ticket').textContent=fmt(kpis.ticket_medio);
@@ -879,6 +912,55 @@ async function loadReports() {
   $('rep-low-stock').innerHTML=low_stock.length?low_stock.map(p=>`<tr><td><strong>${p.name}</strong></td><td>${p.category||'—'}</td><td>${p.tenant_name||'—'}</td><td style="color:var(--danger)">${p.stock_quantity} un</td><td><span class="badge br">⚠ Crítico</span></td></tr>`).join(''):'<tr><td colspan="5" class="empty" style="color:var(--success)">✅ Todos os estoques OK</td></tr>';
 }
 function exportPDF(){$('report-print-date').textContent='Gerado em: '+new Date().toLocaleString('pt-BR');window.print();}
+
+// CSV EXPORT
+let reportDataCache = null;
+function csvEscape(v) {
+  if (v === null || v === undefined) return "";
+  const s = String(v).replace(/"/g, "\"");
+  return s.includes(",") || s.includes("\n") || s.includes("\"") ? `"${s}"` : s;
+}
+function downloadCSV(filename, rows) {
+  const bom = "\uFEFF";
+  const content = bom + rows.map(r => r.map(csvEscape).join(",")).join("\n");
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+function openCSVModal() {
+  if (!reportDataCache) { toast("Abra a página de Relatórios primeiro", "err"); return; }
+  openModal('modal-csv');
+}
+function doExportCSV() {
+  if (!reportDataCache) { toast("Sem dados para exportar", "err"); return; }
+  const { top_products, top_customers, low_stock, revenue_by_tenant } = reportDataCache;
+  const now = new Date().toLocaleString("pt-BR").replace(/[/:, /]/g, "-");
+  let delay = 0;
+  if (document.getElementById('csv-produtos').checked) {
+    const rows = [["Rank","Produto","Categoria","Qtd Vendida","Receita (R$)","Estoque"]];
+    top_products.forEach((p,i) => rows.push([i+1, p.name, p.category||"—", p.qty_sold, parseFloat(p.revenue).toFixed(2), p.stock??'—']));
+    setTimeout(() => downloadCSV(`produtos_${now}.csv`, rows), delay); delay += 300;
+  }
+  if (document.getElementById('csv-clientes').checked) {
+    const rows = [["Cliente","Restaurante","Nivel","Pontos","Total Gasto (R$)","Visitas"]];
+    top_customers.forEach(c => rows.push([c.name, c.tenant_name||"—", c.level, c.points, parseFloat(c.total_spent).toFixed(2), c.visits]));
+    setTimeout(() => downloadCSV(`clientes_${now}.csv`, rows), delay); delay += 300;
+  }
+  if (document.getElementById('csv-receita').checked) {
+    const rows = [["Restaurante","Receita (R$)"]];
+    revenue_by_tenant.forEach(r => rows.push([r.tenant_name, parseFloat(r.revenue).toFixed(2)]));
+    setTimeout(() => downloadCSV(`receita_${now}.csv`, rows), delay); delay += 300;
+  }
+  if (document.getElementById('csv-estoque').checked && low_stock.length > 0) {
+    const rows = [["Produto","Categoria","Restaurante","Qtd em Estoque"]];
+    low_stock.forEach(p => rows.push([p.name, p.category||"—", p.tenant_name||"—", p.stock_quantity]));
+    setTimeout(() => downloadCSV(`estoque_critico_${now}.csv`, rows), delay);
+  }
+  closeModal('modal-csv');
+  toast("Downloads iniciados!", "ok");
+}
 
 // VIEWS
 async function loadViews() {
