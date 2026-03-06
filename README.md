@@ -3,7 +3,7 @@
 **Disciplina:** Banco de Dados  
 **Instituição:** Universidade Federal do Agreste de Pernambuco (UFAPE)  
 **Alunos:** Douglas Henrique, Joaci Laurindo, Genildo Burgos, Antonio Marcos  
-**Data de Entrega:** 06/02/2026
+**Data de Entrega:** 05/03/2026
 
 ---
 
@@ -63,6 +63,126 @@ Sistema completo de gestão de restaurantes com arquitetura **multi-tenant**, pe
 | **vw_order_summary** | 5 tabelas + subquery | Resumo completo dos pedidos com totais |
 | **vw_revenue_by_tenant** | 2 tabelas + GROUP BY | Receita total por restaurante |
 | **vw_cash_register_summary** | 4 tabelas + CASE WHEN | Resumo dos caixas com entradas e saídas |
+
+---
+
+## ⚡ Documentação dos Triggers
+
+Esta entrega implementa **3 gatilhos (triggers)** no banco de dados, todos definidos em `sql/05_TRIGGERS.sql` e executados automaticamente pelo Docker na inicialização.
+
+---
+
+### Trigger 1 — `trg_atualiza_estoque_venda`
+
+| Atributo | Valor |
+|----------|-------|
+| **Tabela** | `order_items` |
+| **Momento** | `AFTER INSERT` |
+
+**Regra de negócio automatizada:**  
+Sempre que um item é adicionado a um pedido, o estoque do produto correspondente é decrementado automaticamente. O trigger age apenas em produtos com controle de estoque ativo (`stock_control = 1`) e usa `GREATEST(0, ...)` para garantir que o estoque nunca fique negativo.
+
+**Como testar:**
+
+```sql
+-- 1. Veja o estoque atual de um produto com stock_control = 1
+SELECT id, name, stock_quantity, stock_control
+FROM products
+WHERE stock_control = 1
+LIMIT 5;
+
+-- 2. Insira um item de pedido para esse produto (ex: product_id = 1, order_id = 1)
+INSERT INTO order_items (order_id, product_id, quantity, unit_price, subtotal, discount, total, status, created_at, updated_at)
+VALUES (1, 1, 3, 32.90, 98.70, 0.00, 98.70, 'pending', NOW(), NOW());
+
+-- 3. Confirme que o estoque diminuiu 3 unidades
+SELECT id, name, stock_quantity FROM products WHERE id = 1;
+```
+
+---
+
+### Trigger 2 — `trg_bloqueia_exclusao_produto`
+
+| Atributo | Valor |
+|----------|-------|
+| **Tabela** | `products` |
+| **Momento** | `BEFORE DELETE` |
+
+**Regra de negócio automatizada:**  
+Impede a exclusão de um produto que possui pedidos ativos em andamento (com status diferente de `delivered` e `cancelled`). Garante a integridade dos dados operacionais — não é possível remover um item que ainda está sendo preparado ou aguardando entrega. O erro é retornado via `SIGNAL SQLSTATE '45000'` e é capturado e exibido pelo frontend.
+
+**Como testar:**
+
+```sql
+-- 1. Crie um pedido ativo com um produto
+INSERT INTO orders (tenant_id, order_number, status, type, subtotal, discount, service_fee, delivery_fee, total, payment_status, created_at, updated_at)
+VALUES (1, 'TESTE001', 'preparing', 'dine_in', 49.90, 0, 0, 0, 49.90, 'pending', NOW(), NOW());
+
+INSERT INTO order_items (order_id, product_id, quantity, unit_price, subtotal, discount, total, status, created_at, updated_at)
+VALUES (LAST_INSERT_ID(), 3, 1, 49.90, 49.90, 0, 49.90, 'preparing', NOW(), NOW());
+
+-- 2. Tente excluir o produto — o trigger deve bloquear com erro:
+-- "Nao e possivel excluir: produto possui pedidos ativos em andamento."
+DELETE FROM products WHERE id = 3;
+
+-- 3. Confirme que a exclusão foi bloqueada
+SELECT id, name FROM products WHERE id = 3;
+```
+
+> **No frontend:** ao clicar em "Excluir" em um produto com pedidos ativos, a mensagem de erro do trigger é capturada pelo `api.php` e exibida como toast de erro na interface.
+
+---
+
+### Trigger 3 — `trg_pontua_cliente_entrega`
+
+| Atributo | Valor |
+|----------|-------|
+| **Tabela** | `orders` |
+| **Momento** | `AFTER UPDATE` |
+
+**Regra de negócio automatizada:**  
+Quando um pedido tem seu status alterado para `delivered`, o sistema acumula automaticamente pontos de fidelidade ao cliente (1 ponto por real gasto, arredondado para baixo) e promove o nível do cliente conforme as regras:
+
+| Pontos acumulados | Nível |
+|-------------------|-------|
+| 0 – 199 | Bronze |
+| 200 – 499 | Silver |
+| 500+ | Gold |
+
+O trigger só é acionado na transição `status != 'delivered'` → `status = 'delivered'`, evitando pontuações duplicadas.
+
+**Como testar:**
+
+```sql
+-- 1. Veja os pontos e nível atuais de um cliente
+SELECT id, name, points, level FROM customers WHERE id = 3;
+
+-- 2. Crie um pedido vinculado a esse cliente
+INSERT INTO orders (tenant_id, customer_id, order_number, status, type, subtotal, discount, service_fee, delivery_fee, total, payment_status, created_at, updated_at)
+VALUES (1, 3, 'TESTE002', 'preparing', 'dine_in', 300.00, 0, 0, 0, 300.00, 'pending', NOW(), NOW());
+
+SET @novo_pedido = LAST_INSERT_ID();
+
+-- 3. Atualize o status para 'delivered' — o trigger dispara
+UPDATE orders SET status = 'delivered' WHERE id = @novo_pedido;
+
+-- 4. Verifique os pontos e o nível atualizado do cliente
+SELECT id, name, points, level FROM customers WHERE id = 3;
+-- Esperado: pontos += 300, nível pode ter sido promovido
+```
+
+---
+
+## 🔁 Correções da Entrega Anterior
+
+Nenhum erro crítico foi identificado na versão anterior. As melhorias realizadas nesta entrega foram:
+
+- ✅ Adição da página **Relatórios Gerenciais** com dashboards, gráficos (Chart.js) e exportação para PDF via `window.print()`
+- ✅ Implementação de **3 triggers** no arquivo `sql/05_TRIGGERS.sql`
+- ✅ Melhoria no módulo de **Estoque** (antes chamado apenas de "Produtos"), com campos `quantity`, `min_stock`, `unit`, `supplier_id` e alerta visual de estoque crítico
+- ✅ Integração dos triggers no frontend: erros do `SIGNAL SQLSTATE` são capturados em `api.php` e exibidos ao usuário
+
+---
 
 ### Diagrama Conceitual
 ![Diagrama ER](img/Diagrama_Conceitual_ER.svg)
@@ -158,9 +278,11 @@ Resultado esperado:
 ```
 bd-restaurantes-multi-tenant/
 │
-├── sql/
+├── ├── sql/
 │   ├── 01_DDL_estrutura.sql      # Criação das tabelas (DDL)
 │   ├── 02_DML_dados_teste.sql    # Dados completos de teste (DML)
+│   ├── 04_VIEWS.sql              # Criação das 3 views SQL
+│   └── 05_TRIGGERS.sql           # 3 triggers do banco de dados(DML)
 │   └── 03_VIEWS.sql              # Criação das 3 views SQL
 │
 ├── app/                          # Aplicação PHP (backend + frontend)
