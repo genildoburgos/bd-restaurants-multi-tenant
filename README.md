@@ -185,7 +185,7 @@ Nenhum erro crítico foi identificado na versão anterior. As melhorias realizad
 ---
 
 ### Diagrama Conceitual
-![Diagrama ER](img/Diagrama_Conceitual_ER.svg)
+![Diagrama ER](img/concept.png)
 ### Diagrama Lógico
 ![Diagrama ER](img/Estrutura%20ER.png)
 
